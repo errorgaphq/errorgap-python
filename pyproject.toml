@@ -1,0 +1,49 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "errorgap"
+version = "0.1.0"
+description = "Python notifier for Errorgap error tracking."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Errorgap" }]
+requires-python = ">=3.9"
+keywords = ["errorgap", "error-tracking", "exceptions", "monitoring"]
+classifiers = [
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Bug Tracking",
+]
+dependencies = []
+
+[project.optional-dependencies]
+django = ["django>=4.2"]
+flask = ["flask>=2.3"]
+fastapi = ["fastapi>=0.100", "starlette>=0.27"]
+dev = [
+  "pytest>=8",
+  "django>=4.2",
+  "flask>=2.3",
+  "fastapi>=0.100",
+  "httpx>=0.27",
+  "starlette>=0.27",
+]
+
+[project.urls]
+Homepage = "https://gitlab.jgrubbs.net/jGRUBBS/errorgap-python"
+Source = "https://gitlab.jgrubbs.net/jGRUBBS/errorgap-python"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/errorgap"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
