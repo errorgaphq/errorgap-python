@@ -38,8 +38,8 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://gitlab.jgrubbs.net/jGRUBBS/errorgap-python"
-Source = "https://gitlab.jgrubbs.net/jGRUBBS/errorgap-python"
+Homepage = "https://github.com/errorgaphq/errorgap-python"
+Source = "https://github.com/errorgaphq/errorgap-python"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/errorgap"]
