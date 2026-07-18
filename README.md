@@ -1,7 +1,8 @@
 # errorgap
 
 Python notifier for [Errorgap](https://errorgap.com). Captures exceptions,
-normalizes tracebacks, and ships notices to an Errorgap server. Single
+normalizes tracebacks with bounded source excerpts for readable frames, and ships
+notices to an Errorgap server. Single
 package covers plain Python, Django, Flask, and FastAPI.
 
 ## Install
@@ -89,7 +90,7 @@ app.add_middleware(ErrorgapMiddleware)
 | `project_id` | `ERRORGAP_PROJECT_ID` | Optional, embedded in payload |
 | `api_key` | `ERRORGAP_API_KEY` | Sent as `x-errorgap-project-key` |
 | `environment` | `ERRORGAP_ENVIRONMENT`, `ENV`, or `development` | |
-| `root_directory` | `os.getcwd()` | Used to mark frames as `in_app` |
+| `root_directory` | `os.getcwd()` | Marks application frames; readable dependency frames also include bounded source excerpts |
 | `async_` | `True` | Background-thread delivery |
 | `logger` | `logging.getLogger("errorgap")` | Pass `None` to silence |
 | `filter_keys` | `("password", "token", ...)` | Substring match, case-insensitive |
