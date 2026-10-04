@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0 — 2026-10-04
+
+- Django and FastAPI/Starlette middleware now time each request as an APM
+  transaction (with `apm_enabled`), grouped by URL pattern / route path, with
+  errors linked to their request and the browser's `x-errorgap-trace` header
+  recorded. `errorgap.django.spans(request)` / `errorgap.fastapi.spans(request)`
+  record spans.
+
 ## 0.2.0 — 2026-10-03
 
 - APM: `track_transaction` / `track_job` context managers, `notify_transaction`,
