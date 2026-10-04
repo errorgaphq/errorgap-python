@@ -61,6 +61,11 @@ MIDDLEWARE = [
 ]
 ```
 
+With `apm_enabled=True` each request is also an APM transaction grouped by
+its URL pattern (`/orders/<int:order_id>`); errors raised during it carry its
+transaction id, and the browser SDK's `x-errorgap-trace` header is recorded.
+Record spans from a view with `errorgap.django.spans(request).database(sql, ms)`.
+
 ## Flask
 
 ```python
@@ -119,8 +124,8 @@ concurrent threads and asyncio tasks never share one;
 ## Browser trace links
 
 When the errorgap browser SDK (`@errorgap/browser` 0.3+) is on the page, its
-API calls send an `x-errorgap-trace` header. The WSGI middleware (and so
-`init_app`) records it, and `track_transaction(..., trace_id=header)` accepts
+API calls send an `x-errorgap-trace` header. The WSGI, Django and FastAPI
+middleware (and so Flask's `init_app`) record it, and `track_transaction(..., trace_id=header)` accepts
 it, so errorgap's browser Performance view links each call to the server
 request that answered it. Malformed values are ignored.
 
@@ -133,6 +138,12 @@ from errorgap.fastapi import ErrorgapMiddleware
 app = FastAPI()
 app.add_middleware(ErrorgapMiddleware)
 ```
+
+With `apm_enabled=True` each request is also an APM transaction grouped by
+its route path (`/orders/{order_id}`); errors raised during it carry its
+transaction id, and the browser SDK's `x-errorgap-trace` header is recorded.
+Record spans from an endpoint with `errorgap.fastapi.spans(request).database(sql, ms)`
+(take `request: Request` as a parameter).
 
 ## Configuration reference
 
