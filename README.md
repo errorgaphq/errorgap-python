@@ -71,6 +71,59 @@ app = Flask(__name__)
 init_app(app)
 ```
 
+`init_app` also times each request as an APM transaction (sent with
+`apm_enabled=True`) grouped by its URL rule (`/orders/<int:id>`), and errors
+raised during the request carry its transaction id. Record spans from a view
+with `errorgap.flask.spans()`:
+
+```python
+from errorgap.flask import spans
+
+@app.route("/orders/<int:order_id>")
+def order(order_id):
+    started = time.perf_counter()
+    row = db.execute("SELECT * FROM orders WHERE id = %s", (order_id,)).fetchone()
+    spans().database("SELECT * FROM orders WHERE id = %s", (time.perf_counter() - started) * 1000)
+    return row
+```
+
+## WSGI
+
+Any WSGI app gets the same request transactions from
+`errorgap.wsgi.ErrorgapMiddleware`. Set `environ["errorgap.route"]` to the
+matched route template to group requests (otherwise the raw path is used).
+
+```python
+from errorgap.wsgi import ErrorgapMiddleware
+
+application = ErrorgapMiddleware(application)
+```
+
+## Transactions and jobs
+
+```python
+with errorgap.track_transaction("GET", "/orders/{id}", "/orders/123") as txn:
+    txn.spans.database("SELECT * FROM orders WHERE id = 123", 4.2)
+    txn.status_code = 200
+
+with errorgap.track_job("ReceiptJob", queue="mailers") as txn:
+    send_receipt()
+```
+
+Both time the block and deliver on exit even if it raises. Errors reported
+inside carry the transaction id (`context.transaction_id`), so errorgap shows
+the error a request raised on its trace. The id lives in a `ContextVar`, so
+concurrent threads and asyncio tasks never share one;
+`errorgap.current_transaction_id()` returns the id in effect.
+
+## Browser trace links
+
+When the errorgap browser SDK (`@errorgap/browser` 0.3+) is on the page, its
+API calls send an `x-errorgap-trace` header. The WSGI middleware (and so
+`init_app`) records it, and `track_transaction(..., trace_id=header)` accepts
+it, so errorgap's browser Performance view links each call to the server
+request that answered it. Malformed values are ignored.
+
 ## FastAPI
 
 ```python
@@ -94,6 +147,8 @@ app.add_middleware(ErrorgapMiddleware)
 | `async_` | `True` | Background-thread delivery |
 | `logger` | `logging.getLogger("errorgap")` | Pass `None` to silence |
 | `filter_keys` | `("password", "token", ...)` | Substring match, case-insensitive |
+| `apm_enabled` | `False` | Send APM transactions |
+| `apm_sample_rate` | `1.0` | Fraction of transactions sent (errors are unaffected) |
 | `capture_globals` | `True` | Install `sys.excepthook` |
 
 ## Graceful shutdown
