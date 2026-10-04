@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.0 — 2026-10-03
+
+- APM: `track_transaction` / `track_job` context managers, `notify_transaction`,
+  and `SpanCollector` for DB and HTTP spans; enabled with `apm_enabled=True`,
+  sampled by `apm_sample_rate`.
+- Errors reported during a transaction carry its id as
+  `context.transaction_id` (held in a `ContextVar`), linking each error to
+  the request or job that raised it.
+- `errorgap.wsgi.ErrorgapMiddleware` times WSGI requests; `errorgap.flask.init_app`
+  installs it and groups requests by URL rule.
+- Requests record the browser SDK's `x-errorgap-trace` header as the
+  transaction's `trace_id`, linking browser API calls to server requests.
+
 ## 0.1.1 — 2026-07-18
 
 - Include bounded inline source excerpts for readable application and dependency

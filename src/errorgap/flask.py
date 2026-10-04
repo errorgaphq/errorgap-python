@@ -1,20 +1,34 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from . import notify
+from .apm import SpanCollector
+from .wsgi import ROUTE_KEY, TRANSACTION_KEY, ErrorgapMiddleware
 
 
 def init_app(app: Any) -> None:
     """Register Errorgap with a Flask application.
 
     Subscribes to Flask's ``got_request_exception`` signal so all unhandled
-    exceptions raised inside a request are reported.
+    exceptions raised inside a request are reported, and wraps the app in
+    :class:`~errorgap.wsgi.ErrorgapMiddleware` so each request is an APM
+    transaction (sent with ``apm_enabled``) grouped by its URL rule, and errors
+    carry its transaction id.
     """
     try:
-        from flask import got_request_exception
+        from flask import got_request_exception, request
     except ImportError as exc:  # pragma: no cover
         raise RuntimeError("Flask is required to use errorgap.flask.init_app") from exc
+
+    if not isinstance(app.wsgi_app, ErrorgapMiddleware):
+        app.wsgi_app = ErrorgapMiddleware(app.wsgi_app)
+
+    @app.before_request
+    def _errorgap_route() -> None:
+        rule = getattr(request, "url_rule", None)
+        if rule is not None:
+            request.environ[ROUTE_KEY] = rule.rule
 
     def _on_exception(sender: Any, exception: BaseException, **_: Any) -> None:
         try:
@@ -36,6 +50,17 @@ def init_app(app: Any) -> None:
 
     # weak=False: keep a strong reference so the local closure isn't GC'd.
     got_request_exception.connect(_on_exception, app, weak=False)
+
+
+def spans() -> Optional[SpanCollector]:
+    """The span collector for the current request's transaction, for
+    recording DB and outbound HTTP spans from views."""
+    from flask import has_request_context, request
+
+    if not has_request_context():
+        return None
+    txn = request.environ.get(TRANSACTION_KEY)
+    return txn.spans if txn is not None else None
 
 
 def _context(request: Any) -> Dict[str, Any]:

@@ -1,15 +1,26 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+import contextlib
+import time
+from datetime import datetime, timezone
+from typing import Any, Dict, Iterator, Optional
 
+from .apm import TRACE_HEADER, Span, SpanCollector, Transaction, browser_trace_id, normalize_sql
 from .client import Client, DeliveryResult
 from .configuration import Configuration
 from .handlers import install_excepthook, uninstall_excepthook
+from .transaction_context import current_transaction_id, new_transaction_id, transaction_scope
 from .version import VERSION
 
 __all__ = [
     "init",
     "notify",
+    "notify_transaction",
+    "track_transaction",
+    "track_job",
+    "current_transaction_id",
+    "transaction_scope",
+    "browser_trace_id",
     "flush",
     "shutdown",
     "configuration",
@@ -17,6 +28,11 @@ __all__ = [
     "Configuration",
     "Client",
     "DeliveryResult",
+    "Span",
+    "SpanCollector",
+    "Transaction",
+    "TRACE_HEADER",
+    "normalize_sql",
     "VERSION",
 ]
 
@@ -35,6 +51,8 @@ def init(
     async_: Optional[bool] = None,
     filter_keys: Optional[tuple] = None,
     logger: Optional[Any] = None,
+    apm_enabled: Optional[bool] = None,
+    apm_sample_rate: Optional[float] = None,
     capture_globals: bool = True,
 ) -> None:
     """Configure the SDK and install global error hooks.
@@ -64,6 +82,10 @@ def init(
         overrides["filter_keys"] = filter_keys
     if logger is not None:
         overrides["logger"] = logger
+    if apm_enabled is not None:
+        overrides["apm_enabled"] = apm_enabled
+    if apm_sample_rate is not None:
+        overrides["apm_sample_rate"] = apm_sample_rate
 
     _configuration = Configuration(**overrides)
     _client.configure(_configuration)
@@ -90,6 +112,61 @@ def notify(
         params=params,
         sync=sync,
     )
+
+
+def notify_transaction(transaction: Transaction, sync: bool = False) -> DeliveryResult:
+    """Deliver a pre-measured APM transaction."""
+    return _client.notify_transaction(transaction, sync=sync)
+
+
+@contextlib.contextmanager
+def track_transaction(
+    method: Optional[str] = None,
+    path: Optional[str] = None,
+    path_raw: Optional[str] = None,
+    trace_id: Optional[str] = None,
+    kind: str = "web",
+) -> Iterator[Transaction]:
+    """Time the ``with`` block as an APM transaction and deliver it on exit,
+    even if the block raises. Errors reported inside it carry the
+    transaction's id. Yields the :class:`Transaction`: record spans on
+    ``txn.spans`` and set ``txn.status_code``. ``trace_id`` takes the raw
+    ``x-errorgap-trace`` header value and ignores anything but a UUID."""
+    txn = Transaction(
+        kind=kind,
+        id=new_transaction_id(),
+        trace_id=browser_trace_id(trace_id),
+        method=method,
+        path=path,
+        path_raw=path_raw,
+    )
+    with _timed(txn):
+        yield txn
+
+
+@contextlib.contextmanager
+def track_job(job_class: str, queue: str = "default") -> Iterator[Transaction]:
+    """Time the ``with`` block as a ``job`` transaction; see
+    :func:`track_transaction`."""
+    txn = Transaction(kind="job", id=new_transaction_id(), job_class=job_class, queue=queue)
+    with _timed(txn):
+        yield txn
+
+
+@contextlib.contextmanager
+def _timed(txn: Transaction) -> Iterator[None]:
+    txn.occurred_at = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    start = time.perf_counter()
+    try:
+        with transaction_scope(txn.id or new_transaction_id()):
+            yield
+    except BaseException:
+        if txn.kind == "web" and txn.status_code is None:
+            txn.status_code = 500
+        raise
+    finally:
+        txn.duration_ms = (time.perf_counter() - start) * 1000.0
+        _client.notify_transaction(txn)
 
 
 def flush(timeout: Optional[float] = None) -> None:

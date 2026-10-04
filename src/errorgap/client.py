@@ -3,14 +3,17 @@ from __future__ import annotations
 import json
 import logging
 import queue
+import random
 import threading
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 from urllib import error as urlerror
 from urllib import request as urlrequest
 
+from .apm import Transaction
 from .configuration import Configuration
 from .notice import build_notice
+from .transaction_context import current_transaction_id
 from .version import VERSION
 
 
@@ -29,7 +32,7 @@ class DeliveryResult:
 class Client:
     def __init__(self, configuration: Configuration):
         self._configuration = configuration
-        self._queue: "queue.Queue[Optional[Dict[str, Any]]]" = queue.Queue()
+        self._queue: "queue.Queue[Optional[Tuple[str, Dict[str, Any]]]]" = queue.Queue()
         self._worker: Optional[threading.Thread] = None
         self._lock = threading.Lock()
 
@@ -51,6 +54,9 @@ class Client:
     ) -> DeliveryResult:
         try:
             self._configuration.validate()
+            transaction_id = current_transaction_id()
+            if transaction_id and "transaction_id" not in (context or {}):
+                context = {**(context or {}), "transaction_id": transaction_id}
             notice = build_notice(
                 exc,
                 self._configuration,
@@ -67,12 +73,37 @@ class Client:
             return self.deliver(notice)
 
         self._ensure_worker()
-        self._queue.put(notice)
+        self._queue.put(("notices", notice))
+        return DeliveryResult(queued=True, status=202)
+
+    def notify_transaction(self, transaction: Transaction, sync: bool = False) -> DeliveryResult:
+        """Deliver an APM transaction. Dropped unless ``apm_enabled``, and
+        sampled by ``apm_sample_rate``."""
+        try:
+            self._configuration.validate()
+            if not self._configuration.apm_enabled:
+                return DeliveryResult(status=204)
+            rate = self._configuration.apm_sample_rate
+            if not (rate >= 1 or (rate > 0 and random.random() < rate)):
+                return DeliveryResult(status=204)
+            payload = transaction.to_payload(self._configuration)
+        except Exception as caught:  # noqa: BLE001 — SDK must not raise
+            self._log(caught)
+            return DeliveryResult(error=caught)
+
+        if sync or not self._configuration.async_:
+            return self._post("transactions", payload)
+
+        self._ensure_worker()
+        self._queue.put(("transactions", payload))
         return DeliveryResult(queued=True, status=202)
 
     def deliver(self, notice: Dict[str, Any]) -> DeliveryResult:
-        url = _notices_url(self._configuration)
-        body = json.dumps(notice).encode("utf-8")
+        return self._post("notices", notice)
+
+    def _post(self, resource: str, payload: Dict[str, Any]) -> DeliveryResult:
+        url = _project_url(self._configuration, resource)
+        body = json.dumps(payload).encode("utf-8")
         headers = {
             "Content-Type": "application/json",
             "User-Agent": f"errorgap-python/{VERSION}",
@@ -130,7 +161,8 @@ class Client:
             try:
                 if item is None:
                     return
-                self.deliver(item)
+                resource, payload = item
+                self._post(resource, payload)
             finally:
                 self._queue.task_done()
 
@@ -147,9 +179,9 @@ class Client:
                 pass
 
 
-def _notices_url(configuration: Configuration) -> str:
+def _project_url(configuration: Configuration, resource: str) -> str:
     base = configuration.endpoint.rstrip("/")
-    return f"{base}/api/projects/{configuration.project_slug}/notices"
+    return f"{base}/api/projects/{configuration.project_slug}/{resource}"
 
 
 def _wait_join(q: "queue.Queue[Any]", timeout: float) -> None:
