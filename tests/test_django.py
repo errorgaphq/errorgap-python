@@ -109,3 +109,29 @@ def test_requests_are_transactions_linked_to_their_errors(ingestor, reset_errorg
     by_message = {n["errors"][0]["message"]: n["context"].get("transaction_id") for n in notices}
     assert by_message["card declined"] == ok_txn["id"]
     assert by_message["django-boom"] == boom_txn["id"]
+
+
+def test_login_signals_report_sign_ins(ingestor, reset_errorgap):
+    from django.contrib.auth.signals import user_logged_in, user_login_failed
+
+    errorgap.init(endpoint=ingestor.endpoint, project_slug="demo", api_key="k", async_=False,
+                  capture_globals=False, auth_events=True)
+    ErrorgapMiddleware(get_response=lambda req: HttpResponse(""))  # connects the signals
+    request = RequestFactory().post("/accounts/login/", REMOTE_ADDR="198.51.100.71",
+                                    HTTP_USER_AGENT="Firefox/131")
+
+    class User:
+        def get_username(self):
+            return "mara"
+
+    user_logged_in.send(sender=User, request=request, user=User())
+    # Django masks the password before sending the signal.
+    user_login_failed.send(sender=None, request=request,
+                           credentials={"username": "admin", "password": "********************"})
+    # A failed check outside a request is not a sign-in attempt.
+    user_login_failed.send(sender=None, request=None, credentials={"username": "cli"})
+
+    events = [r.body["events"][0] for r in ingestor.requests]
+    assert [(e["outcome"], e["user"]) for e in events] == [("success", "mara"), ("failure", "admin")]
+    assert events[0]["path"] == "POST /accounts/login/"
+    assert events[0]["ip"] == "198.51.100.71"

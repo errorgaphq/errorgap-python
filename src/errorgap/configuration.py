@@ -39,6 +39,11 @@ class Configuration:
     filter_keys: tuple = DEFAULT_FILTER_KEYS
     apm_enabled: bool = False
     apm_sample_rate: float = 1.0
+    # Sign-ins to this app (Security › Logins). Off until you opt in: they
+    # carry user names and IPs.
+    auth_events: bool = False
+    # The app's name in Security › Logins; defaults to the project slug.
+    app_name: Optional[str] = field(default_factory=lambda: os.environ.get("ERRORGAP_APP_NAME"))
 
     def validate(self) -> None:
         if not self.project_slug or not str(self.project_slug).strip():

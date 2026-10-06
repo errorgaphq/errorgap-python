@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0 — 2026-10-06
+
+- Sign-ins: `init(auth_events=True)` reports sign-ins to errorgap's
+  Security › Logins. Django's `user_logged_in` / `user_login_failed` signals
+  are reported automatically with the middleware installed;
+  `errorgap.sign_in(outcome, user=, request=)` covers Flask, FastAPI and
+  other outcomes (`password_reset`, `mfa_failure`, `locked`). `app_name`
+  (or `ERRORGAP_APP_NAME`) names the app. Passwords and tokens are never sent.
+
 ## 0.3.0 — 2026-10-04
 
 - Django and FastAPI/Starlette middleware now time each request as an APM
