@@ -145,6 +145,32 @@ transaction id, and the browser SDK's `x-errorgap-trace` header is recorded.
 Record spans from an endpoint with `errorgap.fastapi.spans(request).database(sql, ms)`
 (take `request: Request` as a parameter).
 
+## Sign-ins
+
+Report sign-ins to your app; errorgap shows them beside SSH logins in
+Security › Logins and flags a new IP, country or hour for a user. Off until
+you opt in, since events carry user names and IPs:
+
+```python
+errorgap.init(project_slug="ox-coffee", auth_events=True, app_name="oxcoffee-web")
+```
+
+**Django** needs nothing else: with `ErrorgapMiddleware` installed, Django's
+`user_logged_in` and `user_login_failed` signals are reported (the user's
+`get_username()`; Django masks the password before the signal). Elsewhere,
+or for other outcomes:
+
+```python
+errorgap.sign_in("success" if ok else "failure", user=email, request=request)
+errorgap.sign_in("mfa_failure", user=email, request=request)
+```
+
+Outcomes: `success`, `failure`, `password_reset`, `mfa_failure`, `locked`.
+A Django, Flask or Starlette `request` supplies the IP, user agent and path
+(without the query string); behind a proxy, pass `ip=` yourself. Never pass
+passwords or tokens; errorgap can also store user names hashed
+(Security › Logins › Web apps › Privacy).
+
 ## Configuration reference
 
 | Argument | Default | Notes |
@@ -160,6 +186,8 @@ Record spans from an endpoint with `errorgap.fastapi.spans(request).database(sql
 | `filter_keys` | `("password", "token", ...)` | Substring match, case-insensitive |
 | `apm_enabled` | `False` | Send APM transactions |
 | `apm_sample_rate` | `1.0` | Fraction of transactions sent (errors are unaffected) |
+| `auth_events` | `False` | Send sign-ins (`sign_in`, Django login signals) |
+| `app_name` | `ERRORGAP_APP_NAME` or the project slug | The app's name in Security › Logins |
 | `capture_globals` | `True` | Install `sys.excepthook` |
 
 ## Graceful shutdown

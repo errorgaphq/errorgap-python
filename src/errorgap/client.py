@@ -13,6 +13,7 @@ from urllib import request as urlrequest
 from .apm import Transaction
 from .configuration import Configuration
 from .notice import build_notice
+from .sign_ins import build_sign_in, sign_in_payload
 from .transaction_context import current_transaction_id
 from .version import VERSION
 
@@ -96,6 +97,28 @@ class Client:
 
         self._ensure_worker()
         self._queue.put(("transactions", payload))
+        return DeliveryResult(queued=True, status=202)
+
+    def sign_in(self, outcome: str, sync: bool = False, **fields: Any) -> DeliveryResult:
+        """Report a sign-in to this app (Security › Logins). Dropped unless
+        ``auth_events`` is on, or when the outcome is unknown."""
+        try:
+            self._configuration.validate()
+            if not self._configuration.auth_events:
+                return DeliveryResult(status=204)
+            event = build_sign_in(outcome, **fields)
+            if event is None:
+                raise ValueError(f"unknown sign-in outcome {outcome!r}")
+            payload = sign_in_payload(event, self._configuration)
+        except Exception as caught:  # noqa: BLE001 — SDK must not raise
+            self._log(caught)
+            return DeliveryResult(error=caught)
+
+        if sync or not self._configuration.async_:
+            return self._post("logins/web", payload)
+
+        self._ensure_worker()
+        self._queue.put(("logins/web", payload))
         return DeliveryResult(queued=True, status=202)
 
     def deliver(self, notice: Dict[str, Any]) -> DeliveryResult:

@@ -24,6 +24,7 @@ class ErrorgapMiddleware:
 
     def __init__(self, get_response: Callable[..., Any]):
         self.get_response = get_response
+        install_auth_signals()
 
     def __call__(self, request: Any) -> Any:
         meta = getattr(request, "META", {}) or {}
@@ -136,3 +137,42 @@ def _params(request: Any) -> Dict[str, Any]:
     except Exception:  # noqa: BLE001
         return out
     return out
+
+
+def _on_logged_in(sender: Any, request: Any = None, user: Any = None, **_kwargs: Any) -> None:
+    from . import configuration, sign_in
+
+    if request is None or not configuration().auth_events:
+        return
+    name = user.get_username() if hasattr(user, "get_username") else getattr(user, "pk", None)
+    sign_in("success", user=name, request=request)
+
+
+def _on_login_failed(sender: Any, credentials: Any = None, request: Any = None, **_kwargs: Any) -> None:
+    from . import configuration, sign_in
+
+    # No request: a failed check outside a web request (a shell, a test).
+    if request is None or not configuration().auth_events:
+        return
+    creds = credentials or {}
+    try:
+        from django.contrib.auth import get_user_model
+
+        field = get_user_model().USERNAME_FIELD
+    except Exception:  # noqa: BLE001 — auth app not installed
+        field = "username"
+    # Django masks the password in `credentials`; only the name is read.
+    name = next((creds[k] for k in (field, "username", "email") if isinstance(creds.get(k), str)), None)
+    sign_in("failure", user=name, request=request)
+
+
+def install_auth_signals() -> None:
+    """Report Django's login signals (``user_logged_in``,
+    ``user_login_failed``) as sign-ins. The middleware calls this; it checks
+    ``auth_events`` per event, so ``init`` may run before or after."""
+    try:
+        from django.contrib.auth.signals import user_logged_in, user_login_failed
+    except Exception:  # noqa: BLE001 — django.contrib.auth not available
+        return
+    user_logged_in.connect(_on_logged_in, dispatch_uid="errorgap.sign_in.success")
+    user_login_failed.connect(_on_login_failed, dispatch_uid="errorgap.sign_in.failure")
