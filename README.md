@@ -50,6 +50,37 @@ except Exception as exc:
 `notify` returns a `DeliveryResult` (`status`, `body`, `error`, `queued`).
 The SDK never raises.
 
+## Filtering, hooks and delivery
+
+```python
+import re
+import errorgap
+
+def before_notify(notice):
+    if notice["errors"][0]["type"] == "Http404":
+        return False                      # drop it
+    notice["context"]["team"] = "billing"  # or change it
+
+errorgap.init(
+    filter_keys=("password", "token", re.compile(r"^ssn$")),
+    ignore_environments=["test"],
+    before_notify=before_notify,
+)
+```
+
+`filter_keys` (substrings or compiled patterns) are masked at any depth in
+`params` and `session`. Values that cannot be serialized, reference cycles and
+oversized strings or collections are cut rather than losing the notice. An
+exception's cause chain (`raise … from`, or the exception being handled when
+it was raised) is reported with it, and the Django middleware names the
+signed-in user.
+
+Notices are queued (at most `queue_size`, oldest dropped first) and sent by a
+background thread with a `timeout` per request. A send that fails on the
+network or with a 5xx is retried up to three times; after a 429 the SDK stops
+sending for the server's `Retry-After`. With `release` unset it is read from
+`ERRORGAP_RELEASE`, the hosting platform's commit variable or the git checkout.
+
 ## Django
 
 Add to `MIDDLEWARE`:

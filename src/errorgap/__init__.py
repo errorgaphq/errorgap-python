@@ -56,6 +56,11 @@ def init(
     apm_sample_rate: Optional[float] = None,
     auth_events: Optional[bool] = None,
     app_name: Optional[str] = None,
+    release: Optional[str] = None,
+    ignore_environments: Optional[list] = None,
+    before_notify: Optional[Any] = None,
+    timeout: Optional[float] = None,
+    queue_size: Optional[int] = None,
     capture_globals: bool = True,
 ) -> None:
     """Configure the SDK and install global error hooks.
@@ -93,6 +98,16 @@ def init(
         overrides["auth_events"] = auth_events
     if app_name is not None:
         overrides["app_name"] = app_name
+    if release is not None:
+        overrides["release"] = release
+    if ignore_environments is not None:
+        overrides["ignore_environments"] = list(ignore_environments)
+    if before_notify is not None:
+        overrides["before_notify"] = before_notify
+    if timeout is not None:
+        overrides["timeout"] = timeout
+    if queue_size is not None:
+        overrides["queue_size"] = queue_size
 
     _configuration = Configuration(**overrides)
     _client.configure(_configuration)

@@ -10,9 +10,13 @@ MAX_SOURCE_LINE_CHARS = 400
 
 def parse_backtrace(exc: BaseException, root_directory: str) -> List[Dict[str, Any]]:
     frames: List[Dict[str, Any]] = []
-    # traceback.extract_tb returns oldest -> newest. Errorgap frame index 0 is
-    # the innermost frame where the exception was raised.
-    tb_frames = reversed(traceback.extract_tb(exc.__traceback__))
+    # Each cause's frames follow the exception's own, with continuing
+    # indexes, so the dashboard renders the whole chain as one backtrace.
+    tb_frames: List[Any] = []
+    for link in exception_chain(exc):
+        # traceback.extract_tb returns oldest -> newest. Errorgap frame index
+        # 0 is the innermost frame where the exception was raised.
+        tb_frames.extend(reversed(traceback.extract_tb(link.__traceback__)))
 
     for index, frame in enumerate(tb_frames):
         file = frame.filename
@@ -30,6 +34,27 @@ def parse_backtrace(exc: BaseException, root_directory: str) -> List[Dict[str, A
         frames.append(normalized)
 
     return frames
+
+
+MAX_CAUSE_DEPTH = 10
+
+
+def exception_chain(exc: BaseException) -> List[BaseException]:
+    """The exception, then what caused it (``raise … from``, or the exception
+    being handled when it was raised unless suppressed), and so on."""
+    chain: List[BaseException] = []
+    seen = set()
+    current: Optional[BaseException] = exc
+    while current is not None and id(current) not in seen and len(chain) < MAX_CAUSE_DEPTH:
+        seen.add(id(current))
+        chain.append(current)
+        if current.__cause__ is not None:
+            current = current.__cause__
+        elif not current.__suppress_context__:
+            current = current.__context__
+        else:
+            current = None
+    return chain
 
 
 def _relative_file(file: Optional[str], root: str) -> Optional[str]:

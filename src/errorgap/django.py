@@ -118,9 +118,25 @@ def _environment(request: Any) -> Dict[str, Any]:
 def _session(request: Any) -> Dict[str, Any]:
     try:
         session = getattr(request, "session", None)
-        if session is None:
+        data = dict(session.items()) if session is not None else {}
+    except Exception:  # noqa: BLE001
+        data = {}
+    return {**_user(request), **data}
+
+
+def _user(request: Any) -> Dict[str, Any]:
+    """The signed-in user, as ``session.user_id`` / ``session.user_email``.
+    Reads ``request.user`` only when the auth middleware already set it."""
+    try:
+        user = request.__dict__.get("user") or request.__dict__.get("_cached_user")
+        if user is None or not getattr(user, "is_authenticated", False):
             return {}
-        return dict(session.items())
+        found: Dict[str, Any] = {}
+        if getattr(user, "pk", None) is not None:
+            found["user_id"] = str(user.pk)
+        if getattr(user, "email", None):
+            found["user_email"] = str(user.email)
+        return found
     except Exception:  # noqa: BLE001
         return {}
 
