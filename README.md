@@ -176,6 +176,22 @@ transaction id, and the browser SDK's `x-errorgap-trace` header is recorded.
 Record spans from an endpoint with `errorgap.fastapi.spans(request).database(sql, ms)`
 (take `request: Request` as a parameter).
 
+## Other frameworks, Celery and logging
+
+| You use | Add |
+|---|---|
+| Starlette, Quart, Litestar, Falcon (ASGI), Sanic (ASGI), Django ASGI | `app = errorgap.asgi.ErrorgapMiddleware(app)` |
+| Bottle, Falcon, Pyramid, CherryPy, any WSGI app | `app = errorgap.wsgi.ErrorgapMiddleware(app)` |
+| aiohttp | `web.Application(middlewares=[errorgap.aiohttp.errorgap_middleware])` |
+| Celery | `errorgap.celery.install()` |
+| `logging` | `logging.getLogger().addHandler(errorgap.log_handler.ErrorgapHandler())` |
+
+Import the submodule you use (`from errorgap.celery import install`). Celery
+tasks are timed as `job` transactions and a failed task is reported with its
+name, id, queue, retry count and arguments. The logging handler reports
+`logger.exception(...)` as that exception and a plain `logger.error("…")` as a
+`LoggedError`; it reports ERROR and above unless you pass a level.
+
 ## Sign-ins
 
 Report sign-ins to your app; errorgap shows them beside SSH logins in
