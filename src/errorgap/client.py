@@ -14,6 +14,7 @@ from urllib import request as urlrequest
 from .apm import Transaction
 from .configuration import Configuration
 from .notice import build_notice
+from .remote_settings import RemoteSettings
 from .sign_ins import build_sign_in, sign_in_payload
 from .transaction_context import current_transaction_id
 from .version import VERSION
@@ -60,6 +61,8 @@ class Client:
         # Sending is paused until this monotonic time after a 429 or 503.
         self._paused_until = 0.0
         self._backlog = 0
+        #: What errorgap wants this app to send (the project's remote settings).
+        self.remote = RemoteSettings(lambda: self._configuration)
         self._worker: Optional[threading.Thread] = None
         self._lock = threading.Lock()
 
@@ -86,6 +89,8 @@ class Client:
                 context = {**(context or {}), "transaction_id": transaction_id}
             if self._configuration.ignored_environment():
                 return DeliveryResult(status=202, body="ignored environment")
+            if not self.remote.enabled("errors"):
+                return DeliveryResult(status=202, body="errors are switched off for this project")
             notice = build_notice(
                 exc,
                 self._configuration,
@@ -143,6 +148,8 @@ class Client:
         try:
             self._configuration.validate()
             if not self._configuration.apm_enabled:
+                return DeliveryResult(status=204)
+            if not self.remote.enabled("apm"):
                 return DeliveryResult(status=204)
             rate = self._configuration.apm_sample_rate
             if not (rate >= 1 or (rate > 0 and random.random() < rate)):

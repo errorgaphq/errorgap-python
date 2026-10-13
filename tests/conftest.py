@@ -6,7 +6,13 @@ from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, List, Optional
 
+import os
+
 import pytest
+
+# The fake ingestors here count every request; the settings poll is exercised
+# on its own in test_hardening.py.
+os.environ.setdefault("ERRORGAP_REMOTE_SETTINGS", "false")
 
 
 @dataclass

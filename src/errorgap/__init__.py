@@ -61,6 +61,7 @@ def init(
     before_notify: Optional[Any] = None,
     timeout: Optional[float] = None,
     queue_size: Optional[int] = None,
+    remote_settings: Optional[bool] = None,
     capture_globals: bool = True,
 ) -> None:
     """Configure the SDK and install global error hooks.
@@ -108,6 +109,8 @@ def init(
         overrides["timeout"] = timeout
     if queue_size is not None:
         overrides["queue_size"] = queue_size
+    if remote_settings is not None:
+        overrides["remote_settings"] = remote_settings
 
     _configuration = Configuration(**overrides)
     _client.configure(_configuration)

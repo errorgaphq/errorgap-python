@@ -67,6 +67,13 @@ class Configuration:
     # return a replacement; return ``False`` to drop it.
     before_notify: Optional[Callable[[Dict[str, Any]], Any]] = None
 
+    # Follow the project's settings in errorgap (Project settings › What SDKs
+    # send): stop sending errors or performance data when they are switched
+    # off there. ``ERRORGAP_REMOTE_SETTINGS=false`` turns this off.
+    remote_settings: bool = field(
+        default_factory=lambda: os.environ.get("ERRORGAP_REMOTE_SETTINGS", "").strip().lower() != "false"
+    )
+
     def __post_init__(self) -> None:
         if self.release is None:
             self.release = detect_release(self.root_directory)

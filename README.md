@@ -81,6 +81,15 @@ network or with a 5xx is retried up to three times; after a 429 the SDK stops
 sending for the server's `Retry-After`. With `release` unset it is read from
 `ERRORGAP_RELEASE`, the hosting platform's commit variable or the git checkout.
 
+## Remote settings
+
+Errors and performance data can each be switched off for a project in errorgap
+(Project settings › What SDKs send). Running apps follow within ten minutes,
+with no deploy: the SDK re-reads `GET /api/projects/:slug/config` on a
+background thread. If errorgap cannot be reached, everything stays on.
+`errorgap.init(remote_settings=False)` (or `ERRORGAP_REMOTE_SETTINGS=false`)
+ignores the project's switches.
+
 ## Django
 
 Add to `MIDDLEWARE`:

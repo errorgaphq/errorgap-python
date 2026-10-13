@@ -155,3 +155,44 @@ def test_release_is_read_from_the_platform_variable_then_the_git_checkout(tmp_pa
     assert detect_release(str(tmp_path), {}) == "a" * 40
     assert detect_release(str(tmp_path), {"SOURCE_VERSION": "env1"}) == "env1"
     assert os.path.isdir(tmp_path)
+
+
+def test_remote_settings_switch_a_kind_off_and_stay_on_when_unreadable():
+    seen: list = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802
+            seen.append((self.path, self.headers.get("x-errorgap-project-key")))
+            body = json.dumps({"errors_enabled": False, "apm_enabled": True, "poll_interval_seconds": 600}).encode()
+            self.send_response(200)
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        client = Client(
+            Configuration(
+                endpoint=f"http://127.0.0.1:{server.server_port}", project_slug="demo", api_key="key-demo",
+                release="v1", async_=False, remote_settings=True,
+            )
+        )
+        assert client.remote.enabled("errors"), "everything is on until errorgap says otherwise"
+        assert client.remote.refresh() is True
+        assert seen[-1] == ("/api/projects/demo/config", "key-demo")
+        assert client.notify(RuntimeError("x")).body == "errors are switched off for this project"
+        assert client.remote.enabled("apm")
+        client.remote.stop()
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    unreachable = Client(config("http://127.0.0.1:1", remote_settings=True))
+    assert unreachable.remote.refresh() is False
+    assert unreachable.remote.enabled("errors")
+    unreachable.remote.stop()
+    assert Client(config("http://127.0.0.1:1", remote_settings=False)).remote.enabled("errors")
