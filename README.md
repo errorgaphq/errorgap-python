@@ -50,6 +50,46 @@ except Exception as exc:
 `notify` returns a `DeliveryResult` (`status`, `body`, `error`, `queued`).
 The SDK never raises.
 
+## Filtering, hooks and delivery
+
+```python
+import re
+import errorgap
+
+def before_notify(notice):
+    if notice["errors"][0]["type"] == "Http404":
+        return False                      # drop it
+    notice["context"]["team"] = "billing"  # or change it
+
+errorgap.init(
+    filter_keys=("password", "token", re.compile(r"^ssn$")),
+    ignore_environments=["test"],
+    before_notify=before_notify,
+)
+```
+
+`filter_keys` (substrings or compiled patterns) are masked at any depth in
+`params` and `session`. Values that cannot be serialized, reference cycles and
+oversized strings or collections are cut rather than losing the notice. An
+exception's cause chain (`raise … from`, or the exception being handled when
+it was raised) is reported with it, and the Django middleware names the
+signed-in user.
+
+Notices are queued (at most `queue_size`, oldest dropped first) and sent by a
+background thread with a `timeout` per request. A send that fails on the
+network or with a 5xx is retried up to three times; after a 429 the SDK stops
+sending for the server's `Retry-After`. With `release` unset it is read from
+`ERRORGAP_RELEASE`, the hosting platform's commit variable or the git checkout.
+
+## Remote settings
+
+Errors and performance data can each be switched off for a project in errorgap
+(Project settings › What SDKs send). Running apps follow within ten minutes,
+with no deploy: the SDK re-reads `GET /api/projects/:slug/config` on a
+background thread. If errorgap cannot be reached, everything stays on.
+`errorgap.init(remote_settings=False)` (or `ERRORGAP_REMOTE_SETTINGS=false`)
+ignores the project's switches.
+
 ## Django
 
 Add to `MIDDLEWARE`:
@@ -144,6 +184,22 @@ its route path (`/orders/{order_id}`); errors raised during it carry its
 transaction id, and the browser SDK's `x-errorgap-trace` header is recorded.
 Record spans from an endpoint with `errorgap.fastapi.spans(request).database(sql, ms)`
 (take `request: Request` as a parameter).
+
+## Other frameworks, Celery and logging
+
+| You use | Add |
+|---|---|
+| Starlette, Quart, Litestar, Falcon (ASGI), Sanic (ASGI), Django ASGI | `app = errorgap.asgi.ErrorgapMiddleware(app)` |
+| Bottle, Falcon, Pyramid, CherryPy, any WSGI app | `app = errorgap.wsgi.ErrorgapMiddleware(app)` |
+| aiohttp | `web.Application(middlewares=[errorgap.aiohttp.errorgap_middleware])` |
+| Celery | `errorgap.celery.install()` |
+| `logging` | `logging.getLogger().addHandler(errorgap.log_handler.ErrorgapHandler())` |
+
+Import the submodule you use (`from errorgap.celery import install`). Celery
+tasks are timed as `job` transactions and a failed task is reported with its
+name, id, queue, retry count and arguments. The logging handler reports
+`logger.exception(...)` as that exception and a plain `logger.error("…")` as a
+`LoggedError`; it reports ERROR and above unless you pass a level.
 
 ## Sign-ins
 

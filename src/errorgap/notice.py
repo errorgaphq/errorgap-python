@@ -3,9 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from .backtrace import parse_backtrace
+from .backtrace import exception_chain, parse_backtrace
 from .configuration import Configuration
-from .filter import filter_params
+from .filter import clean, filter_params, truncate
 from .version import VERSION
 
 
@@ -23,8 +23,15 @@ def build_notice(
         "environment": configuration.environment,
         "root_directory": configuration.root_directory,
     }
-    if context:
-        default_context.update(context)
+    if configuration.release:
+        default_context["release"] = configuration.release
+    causes = [
+        {"type": _error_type(link), "message": truncate(_message(link), MAX_MESSAGE_LENGTH)}
+        for link in exception_chain(exc)[1:]
+    ]
+    if causes:
+        default_context["causes"] = causes
+    default_context.update(clean(context))
 
     return {
         "project_id": configuration.project_id,
@@ -32,15 +39,25 @@ def build_notice(
         "errors": [
             {
                 "type": _error_type(exc),
-                "message": str(exc),
+                "message": truncate(_message(exc), MAX_MESSAGE_LENGTH),
                 "backtrace": parse_backtrace(exc, configuration.root_directory),
             }
         ],
         "context": default_context,
-        "environment": environment or {},
-        "session": session or {},
+        "environment": clean(environment),
+        "session": filter_params(session or {}, configuration.filter_keys),
         "params": filter_params(params or {}, configuration.filter_keys),
     }
+
+
+MAX_MESSAGE_LENGTH = 8192
+
+
+def _message(exc: BaseException) -> str:
+    try:
+        return str(exc)
+    except Exception:  # noqa: BLE001 — a broken __str__ must not lose the notice
+        return ""
 
 
 def _error_type(exc: BaseException) -> str:
