@@ -192,6 +192,7 @@ Record spans from an endpoint with `errorgap.fastapi.spans(request).database(sql
 | Starlette, Quart, Litestar, Falcon (ASGI), Sanic (ASGI), Django ASGI | `app = errorgap.asgi.ErrorgapMiddleware(app)` |
 | Bottle, Falcon, Pyramid, CherryPy, any WSGI app | `app = errorgap.wsgi.ErrorgapMiddleware(app)` |
 | aiohttp | `web.Application(middlewares=[errorgap.aiohttp.errorgap_middleware])` |
+| Tornado | `class BaseHandler(errorgap.tornado.ErrorgapMixin, tornado.web.RequestHandler)` |
 | Celery | `errorgap.celery.install()` |
 | `logging` | `logging.getLogger().addHandler(errorgap.log_handler.ErrorgapHandler())` |
 

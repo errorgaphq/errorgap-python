@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "errorgap"
-version = "0.5.0"
+version = "0.5.1"
 description = "Python notifier for Errorgap error tracking."
 readme = "README.md"
 license = { text = "MIT" }
@@ -30,7 +30,9 @@ flask = ["flask>=2.3"]
 fastapi = ["fastapi>=0.100", "starlette>=0.27"]
 celery = ["celery>=5.2"]
 aiohttp = ["aiohttp>=3.8"]
+tornado = ["tornado>=6.0"]
 dev = [
+  "tornado>=6.0",
   "celery>=5.2",
   "aiohttp>=3.8",
   "pytest>=8",

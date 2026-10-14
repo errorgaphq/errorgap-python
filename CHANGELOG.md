@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.5.1 — 2026-10-13
+
+- Tornado: `errorgap.tornado.ErrorgapMixin` reports handler errors and times
+  each request, grouped by the handler's route pattern.
+
+## 0.5.0 — 2026-10-13
+
+- Delivery: a bounded queue (it was unbounded), a `timeout` per request,
+  retries after a network failure or 5xx, and a pause for the server's
+  `Retry-After` after a 429.
+- Fixed: a param JSON cannot serialize raised from `notify(sync=True)` and
+  killed the delivery thread.
+- `before_notify`, `ignore_environments`, cause chains (`context.causes`),
+  release detection, and `filter_keys` applied at any depth, in lists and in
+  the session (compiled patterns allowed). The Django middleware names the
+  signed-in user.
+- Remote settings: errors and performance data can be switched off for a
+  project in errorgap and running apps follow within ten minutes. Fails open;
+  `remote_settings=False` ignores the switches.
+- New integrations: `errorgap.celery.install()`,
+  `errorgap.log_handler.ErrorgapHandler`, `errorgap.aiohttp.errorgap_middleware`
+  and `errorgap.asgi` for any ASGI framework.
+
 ## 0.4.0 — 2026-10-06
 
 - Sign-ins: `init(auth_events=True)` reports sign-ins to errorgap's
