@@ -131,3 +131,58 @@ def test_the_asgi_middleware_is_importable_under_a_framework_neutral_name():
     from errorgap.fastapi import ErrorgapMiddleware as FastApiMiddleware
 
     assert ErrorgapMiddleware is FastApiMiddleware
+
+
+def test_tornado_mixin_reports_errors_and_times_requests(ingestor, reset_errorgap):
+    pytest.importorskip("tornado")
+    import tornado.httpclient
+    import tornado.httpserver
+    import tornado.testing
+    import tornado.web
+
+    from errorgap.tornado import ErrorgapMixin
+
+    _init(ingestor, apm_enabled=True)
+
+    class Base(ErrorgapMixin, tornado.web.RequestHandler):
+        def log_message(self, *args):  # pragma: no cover
+            pass
+
+    class Boom(Base):
+        def get(self):
+            raise RuntimeError("tornado-boom")
+
+    class Order(Base):
+        def get(self, order_id):
+            self.write({"id": order_id})
+
+    class Missing(Base):
+        def get(self):
+            raise tornado.web.HTTPError(404)
+
+    async def run():
+        app = tornado.web.Application(
+            [(r"/boom", Boom), (r"/orders/([0-9]+)", Order), (r"/missing", Missing)], log_function=lambda handler: None
+        )
+        sockets = tornado.testing.bind_unused_port()
+        server = tornado.httpserver.HTTPServer(app)
+        server.add_sockets([sockets[0]])
+        client = tornado.httpclient.AsyncHTTPClient()
+        statuses = {}
+        for path in ("/boom", "/orders/7", "/missing"):
+            response = await client.fetch(f"http://127.0.0.1:{sockets[1]}{path}", raise_error=False)
+            statuses[path] = response.code
+        server.stop()
+        return statuses
+
+    logging.getLogger("tornado.application").disabled = True
+    logging.getLogger("tornado.general").disabled = True
+    assert asyncio.run(run()) == {"/boom": 500, "/orders/7": 200, "/missing": 404}
+
+    [notice] = _notices(ingestor)
+    assert notice["errors"][0]["message"] == "tornado-boom"
+    by_path = {txn["path"]: txn for txn in _transactions(ingestor)}
+    assert by_path["/orders/([0-9]+)"]["status_code"] == 200
+    assert by_path["/boom"]["status_code"] == 500
+    assert by_path["/missing"]["status_code"] == 404
+    assert notice["context"]["transaction_id"] == by_path["/boom"]["id"]
